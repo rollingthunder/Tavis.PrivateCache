@@ -1,23 +1,26 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Net.Http;
-using System.Net.Http.Headers;
-using System.Text;
-using ClientSamples.CachingTools;
-
 namespace Tavis.PrivateCache
 {
+    using System.Collections.Generic;
+    using System.Linq;
+    using System.Net.Http;
+    using System.Net.Http.Headers;
+    using System.Text;
+
     public class CacheEntry
     {
-        public PrimaryCacheKey Key { get; private set; }
-        public HttpHeaderValueCollection<string> VaryHeaders { get; private set; }
+        public PrimaryCacheKey Key { get; protected set; }
+        public IEnumerable<string> VaryHeaders { get; protected set; }
 
-        internal CacheEntry(PrimaryCacheKey key, HttpHeaderValueCollection<string> varyHeaders)
+        /// <summary>
+        /// Constructs a new CacheEntry.
+        /// </summary>
+        /// <param name="key">The primary key information for this entry.</param>
+        /// <param name="varyHeaders">The Vary Header values for this entry.</param>
+        public CacheEntry(PrimaryCacheKey key, IEnumerable<string> varyHeaders)
         {
             Key = key;
             VaryHeaders = varyHeaders;
-        }
+        }       
 
         public string CreateSecondaryKey(HttpRequestMessage request)
         {

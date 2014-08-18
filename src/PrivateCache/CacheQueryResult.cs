@@ -1,11 +1,7 @@
-﻿using System;
-using System.Diagnostics;
-using System.Net.Http;
-using Tavis.PrivateCache;
-
-
-namespace ClientSamples.CachingTools
+﻿namespace Tavis.PrivateCache
 {
+    using System.Diagnostics;
+    using System.Net.Http;
 
     public enum CacheStatus
     {
@@ -72,10 +68,8 @@ namespace ClientSamples.CachingTools
                 {
                     request.Headers.IfModifiedSince = httpResponseMessage.Content.Headers.LastModified;
                 }
-                
+
             }
         }
-
-       
     }
 }

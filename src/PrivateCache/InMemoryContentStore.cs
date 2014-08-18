@@ -1,11 +1,10 @@
-﻿using System.Collections.Generic;
-using System.IO;
-using System.Net.Http;
-using System.Threading.Tasks;
-using ClientSamples.CachingTools;
-
-namespace Tavis.PrivateCache
+﻿namespace Tavis.PrivateCache
 {
+    using System.Collections.Generic;
+    using System.IO;
+    using System.Net.Http;
+    using System.Threading.Tasks;
+
     public class InMemoryContentStore : IContentStore
     {
         private readonly object syncRoot = new object();
@@ -16,11 +15,11 @@ namespace Tavis.PrivateCache
             // NB: Task.FromResult doesn't exist in MS.BCL.Async
             TaskCompletionSource<CacheEntry> ret = new TaskCompletionSource<CacheEntry>();
 
-            if (_responseCache.ContainsKey(cacheKey)) 
+            if (_responseCache.ContainsKey(cacheKey))
             {
                 ret.SetResult(_responseCache[cacheKey].CacheEntry);
-            } 
-            else 
+            }
+            else
             {
                 ret.SetResult(null);
             }
@@ -57,7 +56,7 @@ namespace Tavis.PrivateCache
             {
                 inMemoryCacheEntry = _responseCache[entry.Key];
             }
-            
+
             var newContent = await CloneAsync(content);
             lock (syncRoot)
             {
@@ -72,7 +71,7 @@ namespace Tavis.PrivateCache
 
             foreach (var v in cacheContent.Response.Headers) newResponse.Headers.TryAddWithoutValidation(v.Key, v.Value);
 
-            
+
             if (cacheContent.Response.Content != null)
             {
                 await cacheContent.Response.Content.CopyToAsync(ms).ConfigureAwait(false);
@@ -80,7 +79,7 @@ namespace Tavis.PrivateCache
                 newResponse.Content = new StreamContent(ms);
                 foreach (var v in cacheContent.Response.Content.Headers) newResponse.Content.Headers.TryAddWithoutValidation(v.Key, v.Value);
             }
-           
+
 
             var newContent = new CacheContent()
             {
@@ -99,7 +98,7 @@ namespace Tavis.PrivateCache
     public class InMemoryCacheEntry
     {
         public CacheEntry CacheEntry { get; set; }
-        public Dictionary<string,CacheContent> Responses { get; set; }
+        public Dictionary<string, CacheContent> Responses { get; set; }
 
         public InMemoryCacheEntry(CacheEntry cacheEntry)
         {

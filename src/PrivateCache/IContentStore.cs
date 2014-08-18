@@ -1,8 +1,8 @@
-﻿using System.Threading.Tasks;
-using Tavis.PrivateCache;
-
-namespace ClientSamples.CachingTools
+﻿namespace Tavis.PrivateCache
 {
+    using System.Threading.Tasks;
+    using Tavis.PrivateCache;
+
     public interface IContentStore
     {
 
@@ -12,7 +12,7 @@ namespace ClientSamples.CachingTools
 
         // Retreive actual content based on variant selection key
         Task<CacheContent> GetContentAsync(CacheEntry entry, string secondaryKey);
-        
+
         Task UpdateEntryAsync(CacheContent content);
     }
 }

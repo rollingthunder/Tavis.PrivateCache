@@ -1,11 +1,10 @@
-﻿using System.Net;
-using System.Net.Http;
-using System.Threading;
-using System.Threading.Tasks;
-using ClientSamples.CachingTools;
-
-namespace Tavis.PrivateCache
+﻿namespace Tavis.PrivateCache
 {
+    using System.Net;
+    using System.Net.Http;
+    using System.Threading;
+    using System.Threading.Tasks;
+
     public class PrivateCacheHandler : DelegatingHandler
     {
         private readonly HttpCache _httpCache;
@@ -41,13 +40,11 @@ namespace Tavis.PrivateCache
 
             if (response.StatusCode == HttpStatusCode.NotModified)
             {
-                
-                await _httpCache.UpdateContentAsync(response, queryResult.SelectedVariant); 
+                await _httpCache.UpdateContentAsync(response, queryResult.SelectedVariant);
                 response.Dispose();
                 return queryResult.GetHttpResponseMessage(request);
-                
-            } 
-            
+            }
+
             if (_httpCache.CanStore(response))
             {
                 if (response.Content != null) await response.Content.LoadIntoBufferAsync();

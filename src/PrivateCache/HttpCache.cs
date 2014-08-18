@@ -1,18 +1,18 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Net.Http;
-using System.Net.Http.Headers;
-using System.Threading.Tasks;
-using ClientSamples.CachingTools;
-
-namespace Tavis.PrivateCache
+﻿namespace Tavis.PrivateCache
 {
+    using System;
+    using System.Collections.Generic;
+    using System.Net.Http;
+    using System.Net.Http.Headers;
+    using System.Threading.Tasks;
+
+
     public class HttpCache
     {
         private readonly IContentStore _contentStore;
 
         public Func<HttpResponseMessage, bool> StoreBasedOnHeuristics = (r) => false;
- 
+
         public Dictionary<HttpMethod, object> CacheableMethods = new Dictionary<HttpMethod, object>
         {
             {HttpMethod.Get, null},
@@ -40,12 +40,12 @@ namespace Tavis.PrivateCache
             {
                 return CacheQueryResult.CannotUseCache();
             }
-            var selectedResponse =  await _contentStore.GetContentAsync(cacheEntry, secondaryKey);
+            var selectedResponse = await _contentStore.GetContentAsync(cacheEntry, secondaryKey);
             if (selectedResponse == null)
             {
                 return CacheQueryResult.CannotUseCache();
             }
-            
+
             // Do caching directives require that we revalidate it regardless of freshness?
             var requestCacheControl = request.Headers.CacheControl ?? new CacheControlHeaderValue();
             if ((requestCacheControl.NoCache || selectedResponse.CacheControl.NoCache))
@@ -65,9 +65,8 @@ namespace Tavis.PrivateCache
                 }
                 else
                 {
-                    return CacheQueryResult.ReturnStored(selectedResponse);    
+                    return CacheQueryResult.ReturnStored(selectedResponse);
                 }
-                
             }
 
             // Did the client say we can serve it stale?
@@ -75,34 +74,33 @@ namespace Tavis.PrivateCache
             {
                 if (requestCacheControl.MaxStaleLimit != null)
                 {
-                    if ((DateTime.UtcNow -  selectedResponse.Expires) <= requestCacheControl.MaxStaleLimit)
+                    if ((DateTime.UtcNow - selectedResponse.Expires) <= requestCacheControl.MaxStaleLimit)
                     {
                         return CacheQueryResult.ReturnStored(selectedResponse);
                     }
                 }
                 else
                 {
-                    return CacheQueryResult.ReturnStored(selectedResponse);    
+                    return CacheQueryResult.ReturnStored(selectedResponse);
                 }
             }
 
             // Do we have a selector to allow us to do a conditional request to revalidate it?
-            if (selectedResponse.HasValidator)  
+            if (selectedResponse.HasValidator)
             {
                 return CacheQueryResult.Revalidate(selectedResponse);
             }
 
             // Can't do anything to help
             return CacheQueryResult.CannotUseCache();
-
         }
 
         public bool CanStore(HttpResponseMessage response)
         {
             // Only cache responses from methods that allow their responses to be cached
             if (!CacheableMethods.ContainsKey(response.RequestMessage.Method)) return false;
-            
-            
+
+
             var cacheControlHeaderValue = response.Headers.CacheControl;
 
             // Ensure that storing is not explicitly prohibited
@@ -119,15 +117,14 @@ namespace Tavis.PrivateCache
                 if (cacheControlHeaderValue.SharedMaxAge != null) return true;
             }
 
-            var sc = (int) response.StatusCode;
-            if ( sc == 200 || sc == 203 || sc == 204 || 
-                 sc == 206 || sc == 300 || sc == 301 || 
-                 sc == 404 || sc == 405 || sc == 410 || 
+            var sc = (int)response.StatusCode;
+            if (sc == 200 || sc == 203 || sc == 204 ||
+                 sc == 206 || sc == 300 || sc == 301 ||
+                 sc == 404 || sc == 405 || sc == 410 ||
                  sc == 414 || sc == 501)
             {
                 return StoreBasedOnHeuristics(response);
             }
-
 
             return false;
         }
@@ -139,8 +136,8 @@ namespace Tavis.PrivateCache
             {
                 cacheContent.Expires = newExpires;
             }
-           //TODO Copy headers from notModifiedResponse to cacheContent
-           
+            //TODO Copy headers from notModifiedResponse to cacheContent
+
             await _contentStore.UpdateEntryAsync(cacheContent);
         }
 
@@ -183,8 +180,8 @@ namespace Tavis.PrivateCache
         {
             var age = DateTime.UtcNow - response.Headers.Date.Value;
             if (age.TotalMilliseconds < 0) age = new TimeSpan(0);
-            
-            return new TimeSpan(0, 0, (int) Math.Round(age.TotalSeconds));;
+
+            return new TimeSpan(0, 0, (int)Math.Round(age.TotalSeconds)); ;
         }
     }
 }
