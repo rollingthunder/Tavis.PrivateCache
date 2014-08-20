@@ -22,7 +22,5 @@
         {
             return  Expires > DateTime.UtcNow;
         }
-
-       
     }
 }

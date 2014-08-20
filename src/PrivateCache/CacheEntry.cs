@@ -1,6 +1,8 @@
 namespace Tavis.PrivateCache
 {
+    using System;
     using System.Collections.Generic;
+    using System.Diagnostics.Contracts;
     using System.Linq;
     using System.Net.Http;
     using System.Net.Http.Headers;
@@ -16,11 +18,23 @@ namespace Tavis.PrivateCache
         /// </summary>
         /// <param name="key">The primary key information for this entry.</param>
         /// <param name="varyHeaders">The Vary Header values for this entry.</param>
+        /// <exception cref="ArgumentNullException">If <paramref name="key"/> is <c>null</c></exception>
+        /// <exception cref="ArgumentNullException">If <paramref name="varyHeaders"/> is <c>null</c></exception>
         public CacheEntry(PrimaryCacheKey key, IEnumerable<string> varyHeaders)
         {
+            Contract.Requires<ArgumentNullException>(key != null, "key");
+            Contract.Requires<ArgumentNullException>(varyHeaders != null, "varyHeaders");
+
             Key = key;
             VaryHeaders = varyHeaders;
-        }       
+        }     
+  
+        /// <summary>
+        /// Protected default constructor allows derived classes to bypass parameter validation.
+        /// </summary>
+        protected CacheEntry()
+        {
+        }
 
         public string CreateSecondaryKey(HttpRequestMessage request)
         {
