@@ -3,7 +3,7 @@
     using System;
     using System.Net.Http;
 
-    public class PrimaryCacheKey
+    public class PrimaryCacheKey : IEquatable<PrimaryCacheKey>
     {
         public string Uri { get { return _Uri; } }
         public string Method { get { return _Method; } }
@@ -21,8 +21,11 @@
 
         public override bool Equals(object obj)
         {
-            var key2 = (PrimaryCacheKey)obj;
-            return key2._Uri == _Uri && key2._Method == _Method;
+            if (obj is PrimaryCacheKey)
+            {
+                return this.Equals(obj as PrimaryCacheKey);
+            }
+            return false;
         }
 
         public override int GetHashCode()
@@ -40,6 +43,11 @@
                 Method ?? string.Empty,
                 Uri ?? string.Empty
                 );
+        }
+
+        public bool Equals(PrimaryCacheKey other)
+        {
+            return other._Uri == this._Uri && other._Method == this._Method;
         }
     }
 }
