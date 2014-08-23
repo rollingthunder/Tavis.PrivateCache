@@ -1,21 +1,21 @@
-﻿using System;
-using System.Collections.Generic;
-using System.IO;
-using System.IO.Compression;
-using System.Net;
-using System.Net.Http;
-using System.Net.Http.Headers;
-using System.Threading.Tasks;
-using System.Web.Http;
-
-namespace PrivateCacheTests
+﻿namespace Tavis.PrivateCache.Test
 {
+    using System;
+    using System.Collections.Generic;
+    using System.IO;
+    using System.IO.Compression;
+    using System.Net;
+    using System.Net.Http;
+    using System.Net.Http.Headers;
+    using System.Threading.Tasks;
+    using System.Web.Http;
+
     public class CacheableResourceController : ApiController
     {
         public HttpResponseMessage Head()
         {
             var response = new HttpResponseMessage();
-            response.Headers.Add("CacheableResource","testheader");
+            response.Headers.Add("CacheableResource", "testheader");
             response.Headers.CacheControl = new CacheControlHeaderValue()
             {
                 MaxAge = new TimeSpan(0, 0, 0, 5)
@@ -24,14 +24,14 @@ namespace PrivateCacheTests
             return response;
         }
 
-        
+
         public HttpResponseMessage Get()
         {
             var response = new HttpResponseMessage()
             {
                 Content = new StringContent("This is cached content")
             };
-            response.Headers.CacheControl = new CacheControlHeaderValue() {MaxAge = new TimeSpan(0,0,0,5)};
+            response.Headers.CacheControl = new CacheControlHeaderValue() { MaxAge = new TimeSpan(0, 0, 0, 5) };
 
             response.Headers.CacheControl = new CacheControlHeaderValue()
             {
@@ -53,7 +53,7 @@ namespace PrivateCacheTests
             response.Headers.CacheControl = new CacheControlHeaderValue() { MaxAge = new TimeSpan(0, 0, 0, 5) };
             return response;
         }
-        
+
     }
 
     public class PointAController : ApiController
@@ -61,7 +61,7 @@ namespace PrivateCacheTests
         public HttpResponseMessage Get()
         {
             var response = new HttpResponseMessage(HttpStatusCode.Redirect);
-            response.Headers.Location = new Uri(Url.Link("Default", new {controller = "PointB"}));
+            response.Headers.Location = new Uri(Url.Link("Default", new { controller = "PointB" }));
             response.Headers.CacheControl = new CacheControlHeaderValue() { MaxAge = new TimeSpan(0, 0, 0, 5) };
             return response;
         }
@@ -91,13 +91,13 @@ namespace PrivateCacheTests
             {
                 stringContent = new StringContent("This is cached content");
             }
-             
+
 
             var response = new HttpResponseMessage()
             {
                 Content = stringContent
             };
-            response.Headers.CacheControl = new CacheControlHeaderValue() { MaxAge = new TimeSpan(0, 0, 0,60) };
+            response.Headers.CacheControl = new CacheControlHeaderValue() { MaxAge = new TimeSpan(0, 0, 0, 60) };
             response.Headers.Vary.Add("accept-language");
             return response;
         }
@@ -165,7 +165,7 @@ namespace PrivateCacheTests
                 if (Request.Headers.IfNoneMatch.Contains(etag))
                 {
                     var notModifiedresponse = new HttpResponseMessage(HttpStatusCode.NotModified);
-                    notModifiedresponse.Headers.CacheControl = new CacheControlHeaderValue() { MaxAge = new TimeSpan(0, 0, 0, 5)};
+                    notModifiedresponse.Headers.CacheControl = new CacheControlHeaderValue() { MaxAge = new TimeSpan(0, 0, 0, 5) };
                     notModifiedresponse.Headers.ETag = etag;
                     return notModifiedresponse;
                 }
@@ -175,8 +175,8 @@ namespace PrivateCacheTests
             {
                 Content = content
             };
-            response.Headers.CacheControl = new CacheControlHeaderValue() { MaxAge = new TimeSpan(0, 0, 0, 5)};
-            
+            response.Headers.CacheControl = new CacheControlHeaderValue() { MaxAge = new TimeSpan(0, 0, 0, 5) };
+
             response.Headers.ETag = etag;
             return response;
 
@@ -193,16 +193,16 @@ namespace PrivateCacheTests
             };
             return response;
         }
-        
+
         public async Task<HttpResponseMessage> Post()
         {
-            
+
             var response = new HttpResponseMessage()
             {
                 Content = new StringContent("Post Response : " + await Request.Content.ReadAsStringAsync())
             };
             response.Headers.CacheControl = new CacheControlHeaderValue() { MaxAge = new TimeSpan(0, 0, 0, 5) };
-            
+
             return response;
 
         }

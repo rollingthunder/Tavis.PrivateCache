@@ -1,6 +1,7 @@
 ﻿namespace Tavis.PrivateCache
 {
     using System.Diagnostics;
+    using System.Diagnostics.Contracts;
     using System.Net.Http;
 
     public enum CacheStatus
@@ -12,51 +13,36 @@
 
     public class CacheQueryResult
     {
-        public CacheStatus Status { get; set; }
-        public CacheContent SelectedVariant;
+        private readonly HttpCache Cache;
+        public CacheStatus Status;
+        public ICacheContent SelectedVariant;
+        private HttpResponseMessage Response;
 
-
-        public static CacheQueryResult CannotUseCache()
+        public CacheQueryResult(HttpCache cache, HttpResponseMessage response = null)
         {
-            return new CacheQueryResult()
-            {
-                Status = CacheStatus.CannotUseCache
-            };
-        }
-
-        public static CacheQueryResult Revalidate(CacheContent cacheContent)
-        {
-            return new CacheQueryResult()
-            {
-                Status = CacheStatus.Revalidate,
-                SelectedVariant = cacheContent
-            };
-        }
-
-        public static CacheQueryResult ReturnStored(CacheContent cacheContent)
-        {
-            return new CacheQueryResult()
-            {
-                Status = CacheStatus.ReturnStored,
-                SelectedVariant = cacheContent
-            };
+            Cache = cache;
+            Response = response;
         }
 
         internal HttpResponseMessage GetHttpResponseMessage(HttpRequestMessage request)
         {
-            var response = SelectedVariant.Response;
+            var response = Response ?? SelectedVariant.CreateResponse();
             response.RequestMessage = request;
-            HttpCache.UpdateAgeHeader(response);
+            Cache.UpdateAgeHeader(response);
             return response;
         }
 
 
         internal void ApplyConditionalHeaders(HttpRequestMessage request)
         {
-            Debug.Assert(SelectedVariant != null);
-            if (SelectedVariant == null || !SelectedVariant.HasValidator) return;
+            Contract.Assert(SelectedVariant != null);
 
-            var httpResponseMessage = SelectedVariant.Response;
+            if (SelectedVariant == null || !SelectedVariant.HasValidator)
+            {
+                return;
+            }
+
+            var httpResponseMessage = SelectedVariant.CreateResponse();
 
             if (httpResponseMessage.Headers.ETag != null)
             {
@@ -68,7 +54,6 @@
                 {
                     request.Headers.IfModifiedSince = httpResponseMessage.Content.Headers.LastModified;
                 }
-
             }
         }
     }

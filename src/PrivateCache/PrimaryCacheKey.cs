@@ -30,10 +30,13 @@
 
         public override int GetHashCode()
         {
-            int hash = 13;
-            hash = (hash * 7) + _Uri.GetHashCode();
-            hash = (hash * 7) + _Method.GetHashCode();
-            return hash;
+            unchecked
+            {
+                int hash = 13;
+                hash = (hash * 7) + _Uri.GetHashCode();
+                hash = (hash * 7) + _Method.GetHashCode();
+                return hash;
+            }
         }
 
         public override string ToString()

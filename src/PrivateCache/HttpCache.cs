@@ -1,6 +1,7 @@
 ﻿namespace Tavis.PrivateCache
 {
     using System;
+    using System.Linq;
     using System.Collections.Generic;
     using System.Net.Http;
     using System.Net.Http.Headers;
@@ -10,6 +11,7 @@
     public class HttpCache
     {
         private readonly IContentStore _contentStore;
+        private readonly IClock Clock;
 
         public Func<HttpResponseMessage, bool> StoreBasedOnHeuristics = (r) => false;
 
@@ -20,52 +22,55 @@
             {HttpMethod.Post,null}
         };
 
-        public HttpCache(IContentStore contentStore)
+        public HttpCache(IContentStore contentStore, IClock clock = null)
         {
             _contentStore = contentStore;
+            Clock = clock ?? new RealClock();
         }
 
         public async Task<CacheQueryResult> QueryCacheAsync(HttpRequestMessage request)
         {
+            var primaryKey = new PrimaryCacheKey(request.RequestUri, request.Method);
+
             // Do we have anything stored for this method and URI?
-            var cacheEntry = await _contentStore.GetEntryAsync(new PrimaryCacheKey(request.RequestUri, request.Method));
-            if (cacheEntry == null)
+            var cacheEntries = await _contentStore.GetEntriesAsync(primaryKey);
+            if (!cacheEntries.Any())
             {
-                return CacheQueryResult.CannotUseCache();
+                return CannotUseCache();
             }
 
             // Do we have a matching variant representation?
-            var secondaryKey = cacheEntry.CreateSecondaryKey(request); //, cacheEntry.VaryHeaders
-            if (secondaryKey == "*")   // Vary: * never matches
+            var selectedResponses = await GetSelectedResponsesAsync(cacheEntries, request);
+            if (!selectedResponses.Any())
             {
-                return CacheQueryResult.CannotUseCache();
-            }
-            var selectedResponse = await _contentStore.GetContentAsync(cacheEntry, secondaryKey);
-            if (selectedResponse == null)
-            {
-                return CacheQueryResult.CannotUseCache();
+                return CannotUseCache();
             }
 
-            // Do caching directives require that we revalidate it regardless of freshness?
+            var selected = GetPreferredResponse(selectedResponses);
+            var selectedContent = selected.Item1;
+            var selectedResponse = selected.Item2;
+
+            // Do caching directives require that we re-validate it regardless of freshness?
             var requestCacheControl = request.Headers.CacheControl ?? new CacheControlHeaderValue();
-            if ((requestCacheControl.NoCache || selectedResponse.CacheControl.NoCache))
+            var responseCacheControl = selectedContent.CacheControl();
+            if ((requestCacheControl.NoCache || responseCacheControl.NoCache))
             {
-                return CacheQueryResult.Revalidate(selectedResponse);
+                return Revalidate(selectedContent);
             }
 
             // Is it fresh?
-            if (selectedResponse.IsFresh())
+            if (IsFresh(selectedContent))
             {
                 if (requestCacheControl.MinFresh != null)
                 {
-                    if (HttpCache.CalculateAge(selectedResponse.Response) <= requestCacheControl.MinFresh)
+                    if (CalculateAge(selectedResponse) <= requestCacheControl.MinFresh)
                     {
-                        return CacheQueryResult.ReturnStored(selectedResponse);
+                        return ReturnStored(selectedContent, selectedResponse);
                     }
                 }
                 else
                 {
-                    return CacheQueryResult.ReturnStored(selectedResponse);
+                    return ReturnStored(selectedContent, selectedResponse);
                 }
             }
 
@@ -74,25 +79,60 @@
             {
                 if (requestCacheControl.MaxStaleLimit != null)
                 {
-                    if ((DateTime.UtcNow - selectedResponse.Expires) <= requestCacheControl.MaxStaleLimit)
+                    if ((Clock.UtcNow - selectedContent.Expires) <= requestCacheControl.MaxStaleLimit)
                     {
-                        return CacheQueryResult.ReturnStored(selectedResponse);
+                        return ReturnStored(selectedContent, selectedResponse);
                     }
                 }
                 else
                 {
-                    return CacheQueryResult.ReturnStored(selectedResponse);
+                    return ReturnStored(selectedContent, selectedResponse);
                 }
             }
 
-            // Do we have a selector to allow us to do a conditional request to revalidate it?
-            if (selectedResponse.HasValidator)
+            // Do we have a selector to allow us to do a conditional request to re-validate it?
+            if (selectedContent.HasValidator)
             {
-                return CacheQueryResult.Revalidate(selectedResponse);
+                return Revalidate(selectedContent);
             }
 
             // Can't do anything to help
-            return CacheQueryResult.CannotUseCache();
+            return CannotUseCache();
+        }
+
+        private bool IsFresh(ICacheContent selectedContent)
+        {
+            return selectedContent.Expires > Clock.UtcNow;
+        }
+
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="selectedResponses"></param>
+        /// <returns></returns>
+        private Tuple<ICacheContent, HttpResponseMessage> GetPreferredResponse(IEnumerable<ICacheContent> selectedResponses)
+        {
+            return (from content in selectedResponses
+                    let response = content.CreateResponse()
+                    orderby response.Headers.Date ?? DateTimeOffset.MinValue
+                    select Tuple.Create(content, response)).First();
+        }
+
+        private async Task<IEnumerable<ICacheContent>> GetSelectedResponsesAsync(IEnumerable<CacheEntry> cacheEntries, HttpRequestMessage request)
+        {
+            var result = new List<ICacheContent>();
+
+            var selectedKeys = from entry in cacheEntries
+                               let requestKey = new CacheContentKey(entry.VaryHeaders, request)
+                               from contentKey in entry.ResponseKeys
+                               where requestKey.Equals(contentKey)
+                               select new { Primary = entry.PrimaryKey, Content = contentKey };
+            foreach (var keyPair in selectedKeys)
+            {
+                result.Add(await _contentStore.GetContentAsync(keyPair.Primary, keyPair.Content));
+            }
+
+            return result;
         }
 
         public bool CanStore(HttpResponseMessage response)
@@ -129,34 +169,44 @@
             return false;
         }
 
-        public async Task UpdateContentAsync(HttpResponseMessage notModifiedResponse, CacheContent cacheContent)
+        public async Task UpdateContentAsync(HttpResponseMessage notModifiedResponse, ICacheContent cacheContent)
         {
-            var newExpires = HttpCache.GetExpireDate(notModifiedResponse);
-            if (newExpires > cacheContent.Expires)
+            var newExpires = GetExpireDate(notModifiedResponse);
+
+            var newContent = new CacheContent(cacheContent);
+
+            if (newExpires > newContent.Expires)
             {
-                cacheContent.Expires = newExpires;
+                newContent.Expires = newExpires;
             }
             //TODO Copy headers from notModifiedResponse to cacheContent
 
-            await _contentStore.UpdateEntryAsync(cacheContent);
+            await _contentStore.UpdateEntryAsync(newContent);
         }
 
         public async Task StoreResponseAsync(HttpResponseMessage response)
         {
             var primaryCacheKey = new PrimaryCacheKey(response.RequestMessage.RequestUri, response.RequestMessage.Method);
+            var contentKey = new CacheContentKey(response.Headers.Vary, response.RequestMessage);
 
-            CacheEntry cacheEntry = await _contentStore.GetEntryAsync(primaryCacheKey) ?? new CacheEntry(primaryCacheKey, response.Headers.Vary);
+            var content = new CacheContent()
+            {
+                PrimaryKey = primaryCacheKey,
+                ContentKey = contentKey,
+                Expires = GetExpireDate(response),
+                HasValidator = GetHasValidator(response),
+                Response = response
+            };
 
-            var content = cacheEntry.CreateContent(response);
             await _contentStore.UpdateEntryAsync(content);
 
         }
 
-        public static DateTimeOffset GetExpireDate(HttpResponseMessage response)
+        public DateTimeOffset GetExpireDate(HttpResponseMessage response)
         {
             if (response.Headers.CacheControl != null && response.Headers.CacheControl.MaxAge != null)
             {
-                return DateTime.UtcNow + response.Headers.CacheControl.MaxAge.Value;
+                return Clock.UtcNow + response.Headers.CacheControl.MaxAge.Value;
             }
             else
             {
@@ -165,10 +215,15 @@
                     return response.Content.Headers.Expires.Value;
                 }
             }
-            return DateTime.UtcNow;  // Store but assume stale
+            return Clock.UtcNow;  // Store but assume stale
         }
 
-        public static void UpdateAgeHeader(HttpResponseMessage response)
+        public static bool GetHasValidator(HttpResponseMessage response)
+        {
+            return response.Headers.ETag != null || (response.Content != null && response.Content.Headers.LastModified != null);
+        }
+
+        public void UpdateAgeHeader(HttpResponseMessage response)
         {
             if (response.Headers.Date.HasValue)
             {
@@ -176,12 +231,39 @@
             }
         }
 
-        public static TimeSpan CalculateAge(HttpResponseMessage response)
+        public TimeSpan CalculateAge(HttpResponseMessage response)
         {
-            var age = DateTime.UtcNow - response.Headers.Date.Value;
+            var age = Clock.UtcNow - response.Headers.Date.Value;
             if (age.TotalMilliseconds < 0) age = new TimeSpan(0);
 
             return new TimeSpan(0, 0, (int)Math.Round(age.TotalSeconds)); ;
+        }
+
+
+        public CacheQueryResult CannotUseCache()
+        {
+            return new CacheQueryResult(this)
+            {
+                Status = CacheStatus.CannotUseCache
+            };
+        }
+
+        public CacheQueryResult Revalidate(ICacheContent cacheContent)
+        {
+            return new CacheQueryResult(this)
+            {
+                Status = CacheStatus.Revalidate,
+                SelectedVariant = cacheContent
+            };
+        }
+
+        public CacheQueryResult ReturnStored(ICacheContent cacheContent, HttpResponseMessage response = null)
+        {
+            return new CacheQueryResult(this, response)
+            {
+                Status = CacheStatus.ReturnStored,
+                SelectedVariant = cacheContent
+            };
         }
     }
 }

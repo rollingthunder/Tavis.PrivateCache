@@ -8,10 +8,12 @@ namespace Tavis.PrivateCache
     using System.Net.Http.Headers;
     using System.Text;
 
-    public class CacheEntry
+    public class CacheEntry : IEquatable<CacheEntry>
     {
-        public PrimaryCacheKey Key { get; protected set; }
+        public PrimaryCacheKey PrimaryKey { get; protected set; }
+        public CacheEntryKey EntryKey { get; protected set; }
         public IEnumerable<string> VaryHeaders { get; protected set; }
+        public ISet<CacheContentKey> ResponseKeys { get; protected set; }
 
         /// <summary>
         /// Constructs a new CacheEntry.
@@ -25,10 +27,12 @@ namespace Tavis.PrivateCache
             Contract.Requires<ArgumentNullException>(key != null, "key");
             Contract.Requires<ArgumentNullException>(varyHeaders != null, "varyHeaders");
 
-            Key = key;
-            VaryHeaders = varyHeaders;
-        }     
-  
+            PrimaryKey = key;
+            EntryKey = new CacheEntryKey(varyHeaders);
+            VaryHeaders = varyHeaders.OrderBy(x => x).ToArray();
+            ResponseKeys = new HashSet<CacheContentKey>(CacheContentKeyComparer.Instance);
+        }
+
         /// <summary>
         /// Protected default constructor allows derived classes to bypass parameter validation.
         /// </summary>
@@ -36,51 +40,33 @@ namespace Tavis.PrivateCache
         {
         }
 
-        public string CreateSecondaryKey(HttpRequestMessage request)
+        public override bool Equals(object obj)
         {
-            var key = new StringBuilder(); 
-            foreach (var h in VaryHeaders.OrderBy(v => v))  // Sort the vary headers so that ordering doesn't generate different stored variants
+            if (obj is CacheEntry)
             {
-                if (h != "*")
-                {
-                    key.Append(h).Append(':');
-                    bool addedOne = false;
-                    
-                    IEnumerable<string> values;
-                    if (request.Headers.TryGetValues(h, out values))
-                    {
-                        foreach (var val in values)
-                        {
-                            key.Append(val).Append(',');
-                            addedOne = true;
-                        }
-                    }
-
-                    if (addedOne)
-                    {
-                        key.Length--;  // truncate trailing comma.
-                    }
-                }
-                else
-                {
-                    key.Append('*');
-                }
+                return this.Equals(obj as CacheEntry);
             }
-            return key.ToString().ToLowerInvariant();
+
+            return false;
         }
 
-        public CacheContent CreateContent(HttpResponseMessage response)
+        public bool Equals(CacheEntry other)
         {
-            return new CacheContent()
+            if (other == null)
             {
-                CacheEntry = this,
-                Key = CreateSecondaryKey(response.RequestMessage),
-                HasValidator = response.Headers.ETag != null || (response.Content != null && response.Content.Headers.LastModified != null),
-                Expires = HttpCache.GetExpireDate(response),
-                CacheControl = response.Headers.CacheControl ?? new CacheControlHeaderValue(),
-                Response = response,
-            };
+                return false;
+            }
+
+            var thisCount = this.VaryHeaders.Count();
+            var otherCount = other.VaryHeaders.Count();
+
+            var varyEqual = this.VaryHeaders
+                .Zip(other.VaryHeaders, (x, y) => x == y)
+                .All(x => x);
+
+            return this.PrimaryKey.Equals(other.PrimaryKey)
+                && thisCount == otherCount
+                && varyEqual;
         }
-       
     }
 }
